@@ -101,9 +101,11 @@ def import_aem(file_path):
         mesh.update()
 
         uv_layer = mesh.uv_layers.new(name="UVMap")
-        for i, uv in enumerate(uvs):
-            uv_layer.data[i].uv = uv
-        
+        for poly in mesh.polygons:
+            for loop_index in poly.loop_indices:
+                loop_vert_index = mesh.loops[loop_index].vertex_index
+                uv_layer.data[loop_index].uv = uvs[loop_vert_index]        
+
         if normals_present == True:
             mesh.normals_split_custom_set_from_vertices(normals)
         
@@ -145,14 +147,13 @@ def import_aem(file_path):
         mesh.update()
 
         uv_layer = mesh.uv_layers.new(name="UVMap")
-        
         for poly in mesh.polygons:
             for loop_index in poly.loop_indices:
                 loop_vert_index = mesh.loops[loop_index].vertex_index
                 uv_layer.data[loop_index].uv = uvs[loop_vert_index]
-            
         for uv_data in uv_layer.data:
-            uv_data.uv /= 4096
+            uv_data.uv /= 4095
+            
         
         if normals_present == True:
             mesh.normals_split_custom_set_from_vertices(normals)
