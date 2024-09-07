@@ -6,11 +6,13 @@ from bpy.types import Operator
 import struct
 from numpy import float32, short, ushort
 import bmesh
+import math
+from mathutils import Matrix
 
 bl_info = {
     "name": "AEM Blender Plugin",
     "author": "Chuck Norris",
-    "version": (1, 2),
+    "version": (1, 3),
     "blender": (4, 1, 0),
     "location": "File > Import-Export",
     "description": "AByss Engine Mesh V4,V5 Import / V5 Export",
@@ -19,17 +21,17 @@ bl_info = {
 }
 
 SCALE = 0.01
-NORMALS_SCALE = 1/(2**15-1) # 1>>15
+NORMALS_UNIT_POINT = 1/(2<<15-1) # 1>>15
 
 AEMflags = {
-    "uvs":2,  # these are Texture Coordinates if you will
-    "normals":4,
-    "animations":8,  # guess
-    "faces":16
+    "uvs":2, #000010  # these are Texture Coordinates if you will
+    "normals":4, #000100
+    "animations":8, #001000 # guess
+    "faces":16 #010000
 }
 
 AEMVersion = {
-    "AEMesh":0,
+    "AEMesh":1,
     "V2AEMesh":2,
     "V3AEMesh":3,
     "V4AEMesh":4,
@@ -43,124 +45,155 @@ def sign_check(c, cs):
 
 def read_float(file):
     return float32(struct.unpack('f', file.read(4))[0])
-
     
 def read_short(file):
     return short(struct.unpack('h', file.read(2))[0])
     
+'''for future optimisiation'''    
+def read_short_array(file, len):
+    return struct.unpack(f'{len}h', file.read(len*2))
+    #list()
+    
 def prepare_mesh(me, triang_meth):
-    '''arguments: mesh, traingulation method
-    Traingulates and and splits faces of the mesh for compatibility with AEM format.'''
+    '''Arguments: mesh, triangulation method.
+    Triangulates and splits faces of the mesh for compatibility with AEM format,
+    and rotates the mesh 90 degrees clockwise around the X-axis.'''
+    
     bm = bmesh.new()
     bm.from_mesh(me)
-    bmesh.ops.triangulate(bm, faces=bm.faces, quad_method=triang_meth)
     
-    bm.edges.ensure_lookup_table()
+    rotation_matrix = Matrix.Rotation(-math.pi / 2, 4, 'X')
+    bmesh.ops.transform(bm, matrix=rotation_matrix, verts=bm.verts)
+    
+    bmesh.ops.triangulate(bm, faces=bm.faces, quad_method=triang_meth)
     bm.edges.ensure_lookup_table()
     bmesh.ops.split_edges(bm, edges=bm.edges)
     
     bm.to_mesh(me)
     bm.free()
-
+    
+def triangle_strips_unpack(indicies, tstrip_array):
+    i = 0
+    unpacked = []
+    for strip in tstrip_array:
+        for j in range(strip - 2):
+            if j % 2 == 0:
+                unpacked.append([indicies[i+j], indicies[i+j+1], indicies[i+j+2]])
+            else:
+                unpacked.append([indicies[i+j], indicies[i+j+2], indicies[i+j+1]])
+        i += strip  
+    return unpacked
 
 def import_aem(file_path, import_normals=True):
-    file_aem = open(file_path, 'rb')
-    magic = ""
-    magic_len = 0
-    while magic[-4:] != "Mesh": 
-        magic += file_aem.read(1).decode("utf-8")
-        magic_len += 1
-        if magic_len > 8:
-            #self.report ...
-            file_aem.close()
-            print("Unsupported .aem file. Error reading header")
-            return
-    file_aem.read(1)
-    flags = int.from_bytes(file_aem.read(1))
-    normals_present = (flags & AEMflags["normals"]) != 0
-        
-    if AEMVersion[magic] in (4, 5):
-        with file_aem:
+    with open(file_path, 'rb') as file_aem:
+        magic = ""
+        magic_len = 0
+        while magic[-4:] != "Mesh": 
+            magic += file_aem.read(1).decode("utf-8")
+            magic_len += 1
+            if magic_len > 8:
+                #self.report ...
+                file_aem.close()
+                print("Unsupported .aem file. Error reading header")
+                return
+        file_aem.read(1)
+        flags = int.from_bytes(file_aem.read(1))
+        normals_present = (flags & AEMflags["normals"]) != 0
+        version = AEMVersion[magic]
+            
+        if version in (4, 5):
             file_aem.seek(0x18)
             f_num = int(read_short(file_aem) / 3)
             faces = [(read_short(file_aem), read_short(file_aem), read_short(file_aem)) for _ in range(f_num)]
             v_num = read_short(file_aem)
             vertices = [(read_float(file_aem) * SCALE, read_float(file_aem) * SCALE, read_float(file_aem) * SCALE) for _ in range(v_num)]
+            print("\n\n\n vertices")
+            print(vertices)
             vertices = [(x, -z, y) for x, y, z in vertices]
             uvs = [(read_float(file_aem), read_float(file_aem)) for _ in range(v_num)]
             if import_normals and normals_present:
                 normals = [(read_float(file_aem), read_float(file_aem), read_float(file_aem)) for _ in range(v_num)]
                 normals = [(x, -z, y) for x, y, z in normals]
-            
-        obj_name = os.path.basename(file_path).split('.')[0]
-        mesh = bpy.data.meshes.new(name=obj_name + "_Mesh")
-        obj = bpy.data.objects.new(obj_name, mesh)
-        bpy.context.collection.objects.link(obj)
-        bpy.context.view_layer.objects.active = obj
-        obj.select_set(True)
+                
+            obj_name = os.path.basename(file_path).split('.')[0]
+            mesh = bpy.data.meshes.new(name=obj_name + "_Mesh")
+            obj = bpy.data.objects.new(obj_name, mesh)
+            bpy.context.collection.objects.link(obj)
+            bpy.context.view_layer.objects.active = obj
+            obj.select_set(True)
 
-        mesh.from_pydata(vertices, [], faces)
-        mesh.update()
+            mesh.from_pydata(vertices, [], faces)
+            mesh.update()
 
-        uv_layer = mesh.uv_layers.new(name="UVMap")
-        for i, uv in enumerate(uvs):
-            uv_layer.data[i].uv = uv
+            uv_layer = mesh.uv_layers.new(name="UVMap")
+            for poly in mesh.polygons:
+                for loop_index in poly.loop_indices:
+                    loop_vert_index = mesh.loops[loop_index].vertex_index
+                    uv_layer.data[loop_index].uv = uvs[loop_vert_index]
+            #for i, uv in enumerate(uvs):
+             #   uv_layer.data[i].uv = uv
+                
             
-        print("imported normals:")
-        if import_normals and normals_present:
-            print(normals)
-            mesh.normals_split_custom_set_from_vertices(normals)
-        
-    elif AEMVersion[magic] in (0, 2):
-        with file_aem:
+            if import_normals and normals_present:
+                print("imported normals:")
+                print(normals)
+                mesh.normals_split_custom_set_from_vertices(normals)
+            
+        elif version in (1, 2):
             if AEMVersion[magic] == 2:
                 vertex_cord_size = 6
-            if AEMVersion[magic] == 0:
+                UV_UNIT_POINT = 1/4096 #(2<<12)
+                f_num = int(read_short(file_aem) / 3)
+                faces = [(read_short(file_aem), read_short(file_aem), read_short(file_aem)) for _ in range(f_num)]
+            if AEMVersion[magic] == 1:
                 vertex_cord_size = 3
-            f_num = int(read_short(file_aem) / 3)
-            faces = [(read_short(file_aem), read_short(file_aem), read_short(file_aem)) for _ in range(f_num)]
+                UV_UNIT_POINT = 1/256 #1/(2<<8) 
+                f_num = read_short(file_aem)
+                faces = [read_short(file_aem) for _ in range(f_num)]
+                print(f_num)
+                t_strips_len = read_short(file_aem)
+                t_strips = [read_short(file_aem) for _ in range(t_strips_len)]
+                print(t_strips)
+                faces = triangle_strips_unpack(faces, t_strips)
             v_num = read_short(file_aem)
             v_block = [tuple(read_short(file_aem) for _ in range(vertex_cord_size)) for _ in range(v_num)]
             uvs = [(struct.unpack("h", file_aem.read(2))[0], struct.unpack("h", file_aem.read(2))[0]) for _ in range(v_num)]
             if import_normals and normals_present:
                 normals_block = [(read_short(file_aem), read_short(file_aem), read_short(file_aem)) for _ in range(v_num)]
                         
-        if magic == "V2AEMesh":
-            #if cord is negative sign bits are FFFF else they are 0000
-            vertices = [(x*SCALE * sign_check(x, xs), -z*SCALE * sign_check(z, zs), y*SCALE * sign_check(y, ys)) for x, xs, y, ys, z, zs in v_block]
-        if magic == "AEMesh":
-            vertices = [(x*SCALE, -z*SCALE, y*SCALE) for x, y, z in v_block]
+            if version == 2:
+                #if cord is negative sign bits are FFFF else they are 0000
+                vertices = [(x*SCALE * sign_check(x, xs), -z*SCALE * sign_check(z, zs), y*SCALE * sign_check(y, ys)) for x, xs, y, ys, z, zs in v_block]
+            if version == 1:
+                vertices = [(x*SCALE, -z*SCALE, y*SCALE) for x, y, z in v_block]
+            if import_normals and normals_present:
+                normals = [(x*NORMALS_UNIT_POINT, -z*NORMALS_UNIT_POINT, y*NORMALS_UNIT_POINT) for x, y, z in normals_block]
             
-        if import_normals and normals_present:
-            normals = [(x*NORMALS_SCALE, -z*NORMALS_SCALE, y*NORMALS_SCALE) for x, y, z in normals_block]
-        
-        obj_name = os.path.basename(file_path).split('.')[0]
-        mesh = bpy.data.meshes.new(name=obj_name + "_Mesh")
-        obj = bpy.data.objects.new(obj_name, mesh)
-        bpy.context.collection.objects.link(obj)
-        bpy.context.view_layer.objects.active = obj
-        obj.select_set(True)
-        
-        mesh.from_pydata(vertices, [], faces)
-        mesh.update()
+            obj_name = os.path.basename(file_path).split('.')[0]
+            mesh = bpy.data.meshes.new(name=obj_name + "_Mesh")
+            obj = bpy.data.objects.new(obj_name, mesh)
+            bpy.context.collection.objects.link(obj)
+            bpy.context.view_layer.objects.active = obj
+            obj.select_set(True)
+            
+            mesh.from_pydata(vertices, [], faces)
+            mesh.update()
 
-        uv_layer = mesh.uv_layers.new(name="UVMap")
-        
-        for poly in mesh.polygons:
-            for loop_index in poly.loop_indices:
-                loop_vert_index = mesh.loops[loop_index].vertex_index
-                uv_layer.data[loop_index].uv = uvs[loop_vert_index]
+            uv_layer = mesh.uv_layers.new(name="UVMap")
+            for poly in mesh.polygons:
+                for loop_index in poly.loop_indices:
+                    loop_vert_index = mesh.loops[loop_index].vertex_index
+                    uv_layer.data[loop_index].uv = uvs[loop_vert_index]
+            for uv_data in uv_layer.data:
+                uv_data.uv *= UV_UNIT_POINT
             
-        for uv_data in uv_layer.data:
-            uv_data.uv /= 4096
-        
-        if import_normals and normals_present:
-            mesh.normals_split_custom_set_from_vertices(normals)
-        
-    else:
-        file_aem.close()
-        print("Unsupported file AEM version.")
-        return
+            if import_normals and normals_present:
+                mesh.normals_split_custom_set_from_vertices(normals)
+
+
+        else:
+            print("Unsupported file AEM version.")
+            return
 
 def export_aem(mesh, file_path, aem_version):
 
@@ -188,8 +221,8 @@ def export_aem(mesh, file_path, aem_version):
         file_aem.write(struct.pack("H", v_num))
         for v in vertices:
             file_aem.write(struct.pack("f", v.x / SCALE))
+            file_aem.write(struct.pack("f", v.y / SCALE))
             file_aem.write(struct.pack("f", v.z / SCALE))
-            file_aem.write(struct.pack("f", -v.y / SCALE))
 
         for i, v in enumerate(vertices):
             loop = mesh.loops[i]
@@ -223,8 +256,8 @@ def export_aem(mesh, file_path, aem_version):
 
         for n in normals:
             file_aem.write(struct.pack("f", n.x))
+            file_aem.write(struct.pack("f", n.y))
             file_aem.write(struct.pack("f", n.z))
-            file_aem.write(struct.pack("f", -n.y))
 
         header = file_header.read(56)
         file_aem.write(header)
@@ -276,8 +309,16 @@ class ImportAEM(Operator, ImportHelper):
             for file in self.files:
                 file_path = os.path.join(directory, file.name)
                 import_aem(file_path)
+                #bpy.ops.object.mode_set(mode='EDIT')
+                # Rotate the mesh in Edit Mode by 90 degrees clockwise around the X-axis
+                #bpy.ops.transform.rotate(value=-math.pi / 2, orient_axis='X')
+                #bpy.ops.object.mode_set(mode='OBJECT')
         else:
             import_aem(self.filepath)
+            #bpy.ops.object.mode_set(mode='EDIT')
+            # Rotate the mesh in Edit Mode by 90 degrees clockwise around the X-axis
+            #bpy.ops.transform.rotate(value=-math.pi / 2, orient_axis='X')
+            #bpy.ops.object.mode_set(mode='OBJECT')
             
         return {'FINISHED'}
 
