@@ -5,11 +5,12 @@ from bpy.props import StringProperty, FloatProperty, EnumProperty, BoolProperty,
 from bpy.types import Operator
 import struct
 from numpy import float32, short, ushort
+import bmesh
 
 bl_info = {
     "name": "AEM Blender Plugin",
     "author": "Chuck Norris",
-    "version": (1, 1),
+    "version": (1, 2),
     "blender": (4, 1, 0),
     "location": "File > Import-Export",
     "description": "AByss Engine Mesh V4,V5 Import / V5 Export",
@@ -18,7 +19,7 @@ bl_info = {
 }
 
 SCALE = 0.01
-NORMALS_SCALE = 3.0517578126e-05 # 1>>15
+NORMALS_SCALE = 1/(2**15-1) # 1>>15
 
 AEMflags = {
     "uvs":2,  # these are Texture Coordinates if you will
@@ -36,9 +37,9 @@ AEMVersion = {
 }  
 
 def sign_check(c, cs):
-    if (cs == 0xFFFF and c < 0) or (cs == 0x0 and c >= 0):
+    if (cs == -1 and c < 0) or (cs == 0x0 and c >= 0):
         return 1
-    return 1
+    return -1   
 
 def read_float(file):
     return float32(struct.unpack('f', file.read(4))[0])
@@ -47,11 +48,17 @@ def read_float(file):
 def read_short(file):
     return short(struct.unpack('h', file.read(2))[0])
     
-def mesh_triangulate(me, meth):
-    import bmesh
+def prepare_mesh(me, triang_meth):
+    '''arguments: mesh, traingulation method
+    Traingulates and and splits faces of the mesh for compatibility with AEM format.'''
     bm = bmesh.new()
     bm.from_mesh(me)
-    bmesh.ops.triangulate(bm, faces=bm.faces, quad_method=meth)
+    bmesh.ops.triangulate(bm, faces=bm.faces, quad_method=triang_meth)
+    
+    bm.edges.ensure_lookup_table()
+    bm.edges.ensure_lookup_table()
+    bmesh.ops.split_edges(bm, edges=bm.edges)
+    
     bm.to_mesh(me)
     bm.free()
 
@@ -184,17 +191,10 @@ def export_aem(mesh, file_path, aem_version):
             file_aem.write(struct.pack("f", v.z / SCALE))
             file_aem.write(struct.pack("f", -v.y / SCALE))
 
-        processed_vertices = [False] * len(mesh.vertices)
-        for poly in mesh.polygons:
-            for loop_index in poly.loop_indices:
-                loop = mesh.loops[loop_index]
-                vertex_index = loop.vertex_index
-                
-                # Only write UV if the vertex has not been processed
-                if not processed_vertices[vertex_index]:
-                    uv = mesh.uv_layers.active.data[loop_index].uv
-                    file_aem.write(struct.pack("ff", uv.x, uv.y))
-                    processed_vertices[vertex_index] = True
+        for i, v in enumerate(vertices):
+            loop = mesh.loops[i]
+            uv = mesh.uv_layers.active.data[loop.index].uv
+            file_aem.write(struct.pack("ff", uv.x, uv.y))
         
         '''
         import bmesh
@@ -373,6 +373,7 @@ class ExportAEM(Operator, ExportHelper):
             if ( (self.overwrite and os.path.exists(file_out) ) or (not os.path.exists(file_out)) ):
             
                 mesh = obj.data.copy()
+                
                 #bpy.context.collection.objects.link(bpy.data.objects.new("aem_temp", mesh))
                 #bpy.context.view_layer.objects.active = bpy.context.collection.objects['aem_temp']
             
@@ -387,7 +388,7 @@ class ExportAEM(Operator, ExportHelper):
                 bpy.ops.object.modifier_apply(modifier="Triangulate")
                 
                 '''
-                mesh_triangulate(mesh, self.triangulate_method)
+                prepare_mesh(mesh, self.triangulate_method)
                 
                 export_aem(mesh, self.filepath.replace(".aem", f"_{obj.name}.aem"), AEMVersion[self.aem_version])
                 bpy.data.meshes.remove(mesh)
