@@ -10,12 +10,13 @@ from math import pi
 from mathutils import Matrix, Vector
 #import sys
 #sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-#from read_helper import * 
+from .read_helper import * 
+from .BoundingSphere import *
 
 bl_info = {
     "name": "AEM Blender Plugin",
     "author": "Chuck Norris",
-    "version": (1, 5),
+    "version": (1, 7),
     "blender": (4, 1, 0),
     "location": "File > Import-Export",
     "description": "AByss Engine Mesh V4,V5 Import / V5 Export",
@@ -25,12 +26,11 @@ bl_info = {
 
 SCALE = 0.01
 
-
 FLAGS = {
-"basemesh":1|16, #10001 every mesh should have it
-"uvs":2,        #00010 texture coordinates
-"normals":4,    #00100
-"unk":8,        #01000 per vertex attributes of some kind
+    "basemesh":1|16, #10001 every mesh should have it
+    "uvs":2,        #00010 texture coordinates
+    "normals":4,    #00100
+    "unk":8,        #01000 per vertex attributes of some kind
 }
 VERSION = {
     "AEMesh\x00":1,
@@ -40,68 +40,6 @@ VERSION = {
     "V5AEMesh\x00":5
 }  
 
-
-def read_float(file):
-    return unpack('f', file.read(4))[0]
-    
-def read_short(file):
-    return unpack('h', file.read(2))[0]
-
-def read_short_array(file, len): 
-    return list(unpack(f'{len}h', file.read(len*2)))
-    
-def read_float_array(file, len):
-    return list(unpack(f'{len}f', file.read(len*4)))
-
-def read_short_twins_array(file, len, endian='<'):
-    """Reads a flat array of shorts from a file and converts it into a list of 2-tuples."""
-    if (len % 2 != 0):
-        raise ValueError("Twins array length must be a multiple of 2")
-    flat_array = unpack(f'{endian}{len}h', file.read(len * 2))
-    return list(zip(flat_array[0::2], flat_array[1::2]))
-
-def read_short_triplets_array(file, len, endian='<'):
-    """Reads a flat array of shorts from a file and converts it into a list of 3-tuples."""
-    if (len % 3 != 0):
-        raise ValueError("Triplets array length must be a multiple of 3")
-    flat_array = unpack(f'{endian}{len}h', file.read(len * 2))
-    return list(zip(flat_array[0::3], flat_array[1::3], flat_array[2::3]))
-
-def read_short_quadruplets_array(file, len, endian='<'):
-    """Reads a flat array of shorts from a file and converts it into a list of 4-tuples."""
-    if (len % 4 != 0):
-        raise ValueError("Quadruplets array length must be a multiple of 4")
-    flat_array = unpack(f'{endian}{len}h', file.read(len * 2))
-    return list(zip(flat_array[0::4], flat_array[1::4], flat_array[2::4], flat_array[3::4]))
-
-def read_short_hexlets_array(file, len, endian='<'):
-    """Reads a flat array of shorts from a file and converts it into a list of 4-tuples."""
-    if (len % 6 != 0):
-        raise ValueError("Hexlets array length must be a multiple of 4")
-    flat_array = unpack(f'{endian}{len}h', file.read(len * 2))
-    return list(zip(flat_array[0::6], flat_array[1::6], flat_array[2::6], flat_array[3::6], flat_array[4::6], flat_array[5::6]))    
-
-def read_float_quadruplets_array(file, len, endian='<'):
-    """Reads a flat array of floats from a file and converts it into a list of 4-tuples."""
-    if (len % 4 != 0):
-        raise ValueError("Quadruplets array length must be a multiple of 4")
-    flat_array = unpack(f'{endian}{len}f', file.read(len * 4))
-    return list(zip(flat_array[0::4], flat_array[1::4], flat_array[2::4], flat_array[3::4]))
-  
-def read_float_triplets_array(file, len, endian='<'):
-    """Reads a flat array of floats from a file and converts it into a list of 3-tuples."""
-    if (len % 3 != 0):
-        raise ValueError("Triplets array length must be a multiple of 3")
-    flat_array = unpack(f'{endian}{len}f', file.read(len * 4))
-    return list(zip(flat_array[0::3], flat_array[1::3], flat_array[2::3]))
-
-def read_float_twins_array(file, len, endian='<'):
-    """Reads a flat array of floats from a file and converts it into a list of 2-tuples."""
-    if (len % 2 != 0):
-        raise ValueError("Twins array length must be a multiple of 2")
-    flat_array = unpack(f'{endian}{len}f', file.read(len * 4))
-    return list(zip(flat_array[0::2], flat_array[1::2]))
-    
 '''
 def write floats(file, vec3f_list):
     file.write(pack(f"{len(vec3f_list)*3}", *(x for l in vec3f_list for x in l)))
@@ -125,23 +63,8 @@ def triangle_strips_unpack(indices, tstrip_array):
         i += strip  
     return unpacked
     
-def prepare_mesh(me, triangulate_method):
-    '''Arguments: mesh, triangulation method.
-    Triangulates and splits faces of the mesh for compatibility with AEM format,
-    and rotates the mesh 90 degrees clockwise around the X-axis.'''
-    
-    bm = bmesh.new()
-    bm.from_mesh(me)
-    
-    rotation_matrix = Matrix.Rotation(-pi / 2, 4, 'X')
-    bmesh.ops.transform(bm, matrix=rotation_matrix, verts=bm.verts)
-    
-    bmesh.ops.triangulate(bm, faces=bm.faces, quad_method = triangulate_method)
-    bm.edges.ensure_lookup_table()
-    bmesh.ops.split_edges(bm, edges=bm.edges)
-    
-    bm.to_mesh(me)
-    bm.free()
+
+
 '''    
 def parse_animation(f):
     #read, test, go back
@@ -161,33 +84,7 @@ def parse_animation(f):
     if type == 6:
     if type == 10:
 '''    
-def build_bounding_sphere(bounding_sphere):
-    """Creates wireframe sphere. Gets it adopted by active object. Keep selection in state like before calling."""
-    r = bounding_sphere[3]
-    x,y,z = bounding_sphere[:3]
-    selection = bpy.context.selected_objects
-    active = bpy.context.view_layer.objects.active
-    bpy.ops.object.select_all(action='DESELECT')
-    
-    bpy.ops.mesh.primitive_ico_sphere_add()
-    sphere = bpy.context.view_layer.objects.active
-    bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.mesh.delete(type='ONLY_FACE')    
 
-    bpy.ops.object.mode_set(mode='OBJECT')
-    bpy.context.scene.tool_settings.transform_pivot_point = 'INDIVIDUAL_ORIGINS'
-    bpy.ops.transform.resize(value=(r,r,r))
-    bpy.ops.transform.translate(value=(x,y,z))
-    #bpy.ops.object.transform_apply()
-    
-    #bpy.ops.object.parent_set(type='OBJECT', keep_transform=False)
-    sphere.parent = active
-    #bpy.context.scene.tool_settings.transform_pivot_point = 'CURSOR'
-    #bpy.ops.transform.rotate(value=pi / 2, orient_axis='X')
-    sphere.location = (x,z,-y)
-    for obj in selection:
-      obj.select_set(True)
-    sphere.select_set(False)
 
 def import_aem(file_path, import_normals=True):
     print(f"\nLoading: {os.path.basename(file_path)}")
@@ -212,6 +109,7 @@ def import_aem(file_path, import_normals=True):
                     version = VERSION[magic]
                     
                     submesh_num = 1
+                    first_mesh = True
                     if version in (3, 4, 5):
                         submesh_num = unpack('h',file_aem.read(2))[0]
                         print(f'Number of submeshes: {submesh_num}')
@@ -318,6 +216,11 @@ def import_aem(file_path, import_normals=True):
                 bpy.context.collection.objects.link(obj)
                 bpy.context.view_layer.objects.active = obj
                 obj.select_set(True)
+                if first_mesh:
+                    root_mesh = obj
+                    first_mesh = False
+                else:
+                    obj.parent = root_mesh
                 
                 mesh.from_pydata(vertices, [], faces)
                 mesh.update()
@@ -331,14 +234,15 @@ def import_aem(file_path, import_normals=True):
                 
                 if import_normals and normals_present:
                     mesh.normals_split_custom_set_from_vertices(normals)
+                    obj.data.shade_smooth()
                 
                 if version in (3, 4, 5):
-                    build_bounding_sphere(bounding_sphere)
+                    build_bounding_sphere(bounding_sphere, obj_name)
                     
                     importer_state = "READ_ANIM"
                 else:
                     importer_state = "END"
-                       
+                
                     
             if importer_state == "READ_ANIM": 
                 print(importer_state)
@@ -372,9 +276,9 @@ def import_aem(file_path, import_normals=True):
                     print(f'Unknown tail 2nd interpetation: {tail2}')
                     #if reading_done_position != tail_start_position:
                     #    print(f'Unread data left at {hex(reading_done_position)} of size {hex(tail_start_position)}')
-                    if tail[5] != -1:
-                        importer_state = "END"
-                    elif submeshes_left > 0:
+                    #if tail[5] != -1:
+                    #   importer_state = "END"
+                    if submeshes_left > 0:
                         importer_state = "READ_MESH"
                     else:
                         importer_state = "END"
@@ -384,14 +288,88 @@ def import_aem(file_path, import_normals=True):
                     return -1
                 if version == 1:
                     return (version, is_transparent)
-                return (version, normals_present, submesh_num)               
+                return (root_mesh, version, normals_present, submesh_num)               
                
-def export_aem(mesh, file_path, aem_version):
+def export_aem(mesh, file_path, aem_version, triangulate_method):
 
-    faces = [face.vertices for face in mesh.polygons]
-    vertices = [v.co for v in mesh.vertices]
+    '''Arguments: mesh, triangulation method.
+    Triangulates and splits faces of the mesh for compatibility with AEM format,
+    and rotates the mesh 90 degrees clockwise around the X-axis.'''
+    
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    rotation_matrix = Matrix.Rotation(-pi / 2, 4, 'X')
+    bmesh.ops.transform(bm, matrix=rotation_matrix, verts=bm.verts)
+    bmesh.ops.triangulate(bm, faces=bm.faces, quad_method = triangulate_method)
+    bmesh.ops.split_edges(bm, edges=bm.edges)
+    bm.edges.ensure_lookup_table()
+
+    def uv_from_vert_first(uv_layer, v):
+        for l in v.link_loops:
+            uv_data = l[uv_layer]
+            return uv_data.uv
+        return None
+
+    def uv_from_vert_average(uv_layer, v):
+        uv_average = Vector((0.0, 0.0))
+        total = 0.0
+        for loop in v.link_loops:
+            uv_average += loop[uv_layer].uv
+            total += 1.0
+
+        if total != 0.0:
+            return uv_average * (1.0 / total)
+        else:
+            return None
+
+    # Example using the functions above
+    uv_layer = bm.loops.layers.uv.active
+    uv_per_vertex = []
+    for v in bm.verts:
+        uv_first = uv_from_vert_first(uv_layer, v)
+        uv_per_vertex.append(uv_first)
+        uv_average = uv_from_vert_average(uv_layer, v)
+        print("Vertex: %r, uv_first=%r, uv_average=%r" % (v, uv_first, uv_average))
+    bmnormals = []
+    for v in bm.verts:
+        # Custom normals are stored in the `normal` attribute of each vertex
+        # But note, this is not directly "split normals" but rather the custom normal for this vertex
+        bmnormals.append([*v.normal])
+
+ 
+    bm.to_mesh(mesh)
+    bm.free()
+
+    
+    #faces = [face.vertices for face in mesh.polygons]
+    #vertices = [v.co for v in mesh.vertices]
+    uv_layer = mesh.uv_layers.active.data if mesh.uv_layers.active else None
+    uvs = [uv.uv for uv in uv_layer] if uv_layer else []
     uvs = [uv.uv for uv in mesh.uv_layers.active.data]
     normals = [v.normal for v in mesh.vertices]
+
+    # Extract vertices and faces
+    #vertices = [(v.co.x, v.co.y, v.co.z) for v in mesh.vertices]
+    #faces = [(t.vertices[0], t.vertices[1], t.vertices[2]) for t in mesh.loop_triangles]
+    #faces = [[*t.vertices] for t in mesh.loop_triangles]
+    
+
+    
+    def write_short(file, value, endian='<'):
+        """Writes a short integer to a binary file."""
+        file.write(pack(f'{endian}h', value))
+
+    def write_short_triplets_array(file, array, endian='<'):
+        """Writes an array of 3-tuple shorts to a binary file."""
+        for triplet in array:
+            file.write(pack(f'{endian}hhh', *triplet))
+    
+
+    def write_float_triplets_array(file, array, endian='<'):
+        """Writes an array of 3-tuple floats to a binary file."""
+        for triplet in array:
+            file.write(pack(f'{endian}fff', *triplet))
+    
 
     addon_directory = os.path.dirname(os.path.abspath(__file__))
     header_file_path = os.path.join(addon_directory, 'header.bin')
@@ -400,39 +378,38 @@ def export_aem(mesh, file_path, aem_version):
         header = file_header.read(24)
         file_aem.write(header)
         
-        f_num = len(faces)
-        file_aem.write(pack("H", f_num*3))
-        for vi in faces:
-            file_aem.write(pack("H", vi[0] ))
-            file_aem.write(pack("H", vi[1] ))
-            file_aem.write(pack("H", vi[2] ))
+
+        indices = []
+        for poly in mesh.polygons:
+            for loop_index in poly.loop_indices:
+                indices.append(mesh.loops[loop_index].vertex_index)
+        indices_num = len(indices)
+        write_short(file_aem, indices_num)
+        #print(faces)
+        #write_short_triplets_array(file_aem, faces)
+        #print(*indices)
+        file_aem.write(pack(f"{indices_num}H", *indices))
         
+        vertices = [(v.co.x, v.co.y, v.co.z) for v in mesh.vertices]#[*(v.co for v in mesh.vertices)]
         v_num = len(vertices)
+        write_short(file_aem, v_num)
+        write_float_triplets_array(file_aem, vertices)
+    
+        #uv_layer = mesh.uv_layers.active.data if mesh.uv_layers.active else None
+        #uvs = [uv.uv for uv in uv_layer] if uv_layer else []
+        #print(*uvs)
+        #for uv in uvs:
+        #    file_aem.write(pack("ff", uv[0], uv[1]))
+        for uv in uv_per_vertex:
+            print(uv)
+            if uv is not None:
+                file_aem.write(pack(f"2f", uv[0],uv[1]))
 
-        file_aem.write(pack("H", v_num))
-        for v in vertices:
-            file_aem.write(pack("f", v.x / SCALE))
-            file_aem.write(pack("f", v.y / SCALE))
-            file_aem.write(pack("f", v.z / SCALE))
-
-        for i, v in enumerate(vertices):
-            loop = mesh.loops[i]
-            uv = mesh.uv_layers.active.data[loop.index].uv
-            file_aem.write(pack("ff", uv.x, uv.y))
-        
-        '''
-        import bmesh
-        bm = bmesh.new()
-        bm.from_mesh(mesh)
-
-        for v, normal in zip(bm.verts, normals):
-            v.normal = normal
-        bm.to_mesh(mesh)
-        bm.free()
-        # Correctly set the custom normals
-        # Convert vertex normals to loop normals
-           '''     
-        '''        processed_vertices = [False] * len(mesh.vertices)
+        #normals = [v.normal for v in mesh.vertices]
+        write_float_triplets_array(file_aem, bmnormals)   
+        #file_aem.write(pack(f"{len(bmnormals)}f", *bmnormals))
+        """
+        processed_vertices = [False] * len(mesh.vertices)
         for poly in mesh.polygons:
             for loop_index in poly.loop_indices:
                 loop = mesh.loops[loop_index]
@@ -440,16 +417,10 @@ def export_aem(mesh, file_path, aem_version):
                 if not processed_vertices[vertex_index]:
                     normal = normals[mesh.loops[loop_index].vertex_index]
                     print(normal.x, normal.y, normal.z, "\n")
-                    file_aem.write(pack("fff", normal.x, normal.z, -normal.y))
+                    file_aem.write(pack("fff", normal.x, normal.y, normal.z))"""
         # mesh.use_auto_smooth = True
 
-        '''    
-
-        for n in normals:
-            file_aem.write(pack("f", n.x))
-            file_aem.write(pack("f", n.y))
-            file_aem.write(pack("f", n.z))
-
+           
         header = file_header.read(56)
         file_aem.write(header)
 
@@ -504,11 +475,15 @@ class ImportAEM(Operator, ImportHelper):
             for file in self.files:
                 file_path = os.path.join(directory, file.name)
                 bpy.ops.object.select_all(action='DESELECT')
-                import_aem(file_path)
-                bpy.ops.transform.rotate(value=-pi / 2, orient_axis='X')
-                bpy.ops.transform.resize(value=(SCALE,SCALE,SCALE))
+                root_mesh = import_aem(file_path)[0]
+                bpy.ops.object.select_all(action='DESELECT')
+                bpy.context.view_layer.objects.active = root_mesh
+                #bpy.ops.transform.rotate(value=-pi / 2, orient_axis='X')
+                #bpy.ops.transform.resize(value=(SCALE,SCALE,SCALE))
+                root_mesh.rotation_euler = (pi/2, 0, 0)
+                root_mesh.scale = (SCALE,SCALE,SCALE)
                 #bpy.ops.object.transform_apply(rotation=True, scale=True)
-                bpy.ops.object.shade_smooth()
+                #bpy.ops.object.shade_smooth()
                 aem_collection = bpy.data.collections.new(os.path.basename(file_path).split('.')[0])
                 bpy.context.scene.collection.children.link(aem_collection)
                 for obj in bpy.context.selected_objects:
@@ -518,12 +493,18 @@ class ImportAEM(Operator, ImportHelper):
 
         else:
             bpy.ops.object.select_all(action='DESELECT')
-            import_aem(self.filepath)
+            root_mesh = import_aem(self.filepath)[0]
+            bpy.ops.object.select_all(action='DESELECT')
+            bpy.context.view_layer.objects.active = root_mesh
+            print(root_mesh)
+            print(bpy.context.view_layer.objects.active)
             bpy.context.scene.tool_settings.transform_pivot_point = 'INDIVIDUAL_ORIGINS'
-            bpy.ops.transform.rotate(value=-pi/2, orient_axis='X')
-            bpy.ops.transform.resize(value=(SCALE,SCALE,SCALE))
+            root_mesh.rotation_euler = (pi/2, 0, 0)
+            root_mesh.scale = (SCALE,SCALE,SCALE)
+            #bpy.ops.transform.rotate(value=-pi/2, orient_axis='X')
+            #bpy.ops.transform.resize(value=(SCALE,SCALE,SCALE))
             #bpy.ops.object.transform_apply(rotation=True, scale=True)
-            bpy.ops.object.shade_smooth()
+            #bpy.ops.object.shade_smooth()
             
         return {'FINISHED'}
 
@@ -595,6 +576,9 @@ class ExportAEM(Operator, ExportHelper):
         default=False
     )
     
+    #def prepare_mesh(self, me, triangulate_method):
+
+
 
     def execute(self, context):
         global SCALE
@@ -634,9 +618,9 @@ class ExportAEM(Operator, ExportHelper):
                 bpy.ops.object.modifier_apply(modifier="Triangulate")
                 
                 '''
-                prepare_mesh(mesh, self.triangulate_method)
+                #self.prepare_mesh(mesh, self.triangulate_method)
                 
-                export_aem(mesh, self.filepath.replace(".aem", f"_{obj.name}.aem"), VERSION[self.aem_version])
+                export_aem(mesh, self.filepath.replace(".aem", f"_{obj.name}.aem"), VERSION[self.aem_version+"\x00"], self.triangulate_method)
                 bpy.data.meshes.remove(mesh)
             else:
                 self.report({'WARNING'}, f"File {file_out} already exists and overwrite is disabled.")
