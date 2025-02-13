@@ -280,9 +280,7 @@ def import_aem(file_path, import_normals=True):
                     #   importer_state = "END"
                     if submeshes_left > 0:
                         importer_state = "READ_MESH"
-                    else:
-                        importer_state = "END"
-                        
+
             if importer_state == "END":    
                 if mesh_present == False:
                     return -1
