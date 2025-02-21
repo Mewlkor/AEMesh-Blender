@@ -1,4 +1,3 @@
-import struct
 import numpy as np
 
 def read_float(file):
