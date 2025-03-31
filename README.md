@@ -8,7 +8,7 @@
 *mesh* \[sc] 
 | &emsp; **float** *pivot_point* \[3]               | ❌      | ❌        | ✔        | ✔        | ✔        |
 | &emsp; **ushort** *face_indicies_count* (fc)           | ❌ / ✔**      | ✔        | ✔        | ✔        | ✔        |
-| &emsp; **short** *face_indicies* \[fc/3]\[3]           | ❌ / ✔**      | ✔        | ✔        | ✔        | ✔        |
+| &emsp; **ushort** *face_indicies* \[fc/3]\[3]           | ❌ / ✔**      | ✔        | ✔        | ✔        | ✔        |
 | &emsp; **short** *triangle_strips_count* (tc)        | ✔ / ❌**      | ❌        | ❌        | ❌        | ❌        |
 | &emsp; **short** *triangle_strips* \[tc]            | ✔ / ❌**      | ❌        | ❌        | ❌        | ❌        |
 | &emsp; **ushort** *vertex_count* (vc)                  | ✔       | ✔        | ✔        | ✔        | ✔        |

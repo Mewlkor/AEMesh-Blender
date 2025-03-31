@@ -30,6 +30,13 @@ def read_short_triplets_array(file, len, endian='<'):
     flat_array = unpack(f'{endian}{len}h', file.read(len * 2))
     return list(zip(flat_array[0::3], flat_array[1::3], flat_array[2::3]))
 
+def read_ushort_triplets_array(file, len, endian='<'):
+    """Reads a flat array of shorts from a file and converts it into a list of 3-tuples."""
+    if (len % 3 != 0):
+        raise ValueError("Triplets array length must be a multiple of 3")
+    flat_array = unpack(f'{endian}{len}H', file.read(len * 2))
+    return list(zip(flat_array[0::3], flat_array[1::3], flat_array[2::3]))
+
 def read_short_quadruplets_array(file, len, endian='<'):
     """Reads a flat array of shorts from a file and converts it into a list of 4-tuples."""
     if (len % 4 != 0):

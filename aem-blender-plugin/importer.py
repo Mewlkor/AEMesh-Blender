@@ -79,7 +79,7 @@ def import_aem(file_path):
                     pivot_point = unpack('fff',file_aem.read(12))
                     print(f'Pivot point: x: {pivot_point[0]}, y: {pivot_point[1]}, z: {pivot_point[2]}')
                     indices_num = read_ushort(file_aem)
-                    faces = read_short_triplets_array(file_aem, indices_num)
+                    faces = read_ushort_triplets_array(file_aem, indices_num)
                     v_num = read_ushort(file_aem)
                     vertices = read_float_triplets_array(file_aem, v_num * 3)
                     if uvs_present:
