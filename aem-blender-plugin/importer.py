@@ -175,7 +175,7 @@ def import_aem(file_path):
                 
                 mesh.from_pydata(vertices, [], faces)
                 mesh.update()
-                mesh.validate()
+                #mesh.validate()
                 if uvs_present:
                     uv_layer = mesh.uv_layers.new(name="UVMap")
                     for poly in mesh.polygons:
